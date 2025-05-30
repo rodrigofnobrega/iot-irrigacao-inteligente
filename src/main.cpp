@@ -23,15 +23,15 @@
 #define WIFI_SSID          "Wokwi-GUEST"
 #define WIFI_PASSWORD      ""
 
+// Configurações para se conectar ao Adafruit
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883
 #define AIO_USERNAME    "rodrigofnobrega"
 
 unsigned long lastTime = 0;
 
-DHTesp dhtSensor;
 WiFiClient client;
-WiFiClient clientAdafruit;
+DHTesp dhtSensor;
 Servo servo;
 
 HADevice device("irrigacao_solo_device");
@@ -43,12 +43,16 @@ HASwitch led_yellow("irrigacao_led_yellow");
 HASensor dhtSensorHumi("irrigacao_humidity");
 HASwitch servo_switch("irrigacao_servo");
 
-Adafruit_MQTT_Client mqttAdafruit(&clientAdafruit, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_USERNAME, );
+WiFiClient clientAdafruit; // Wifi para o adafruit para evitar conflito com o Wifi do HA
 
+// Conectar ao adafruit e mapear rotas MQTT
+Adafruit_MQTT_Client mqttAdafruit(&clientAdafruit, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_USERNAME, );
 Adafruit_MQTT_Publish mqttUmidadePublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_umidade");
 Adafruit_MQTT_Publish mqttServoPublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_servo");
 Adafruit_MQTT_Publish mqttIntensidadeBombaPublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_intensidade_bomba");
 
+
+// Conectar ao MQTT do Adafruit
 void MQTT_connect() {
   int8_t ret;
   if (mqttAdafruit.connected()) return;
@@ -177,10 +181,12 @@ void loop() {
       led_yellow.setState(LOW);
       servo.write(90);
       servo_switch.setState(HIGH);
+      // Enviar dados para o adafruit
+      mqttServoPublish.publish("ON"); 
+      mqttIntensidadeBombaPublish.publish("Vazão Alta");
+
       Serial.println("Servo ABERTO 90°");
       Serial.println("Led verde ligado");
-      mqttServoPublish.publish("ON");
-      mqttIntensidadeBombaPublish.publish("Vazão Alta");
     } else if (humidity < 60) {
       desligarTodosLeds();
       digitalWrite(LED_RED_PIN, HIGH);
@@ -190,10 +196,12 @@ void loop() {
       led_yellow.setState(HIGH);
       servo.write(45);
       servo_switch.setState(HIGH);
-      Serial.println("Servo ABERTO 45°");
-      Serial.println("Led amarelo ligado");
+      // Enviar dados para o adafruit
       mqttServoPublish.publish("ON");
       mqttIntensidadeBombaPublish.publish("Vazão Média");
+
+      Serial.println("Servo ABERTO 45°");
+      Serial.println("Led amarelo ligado");
     } else {
       desligarTodosLeds();
       digitalWrite(LED_RED_PIN, HIGH);
@@ -202,12 +210,15 @@ void loop() {
       led_yellow.setState(LOW);
       servo.write(0);
       servo_switch.setState(LOW);
-      Serial.println("Servo Fechado");
-      Serial.println("Led vermelho ligado");
+      // Enviar dados para o adafruit
       mqttServoPublish.publish("OFF");
       mqttIntensidadeBombaPublish.publish("Desligado");
+
+      Serial.println("Servo Fechado");
+      Serial.println("Led vermelho ligado");
     }
 
+    // Enviar umidade para o adafruit
     mqttUmidadePublish.publish(humidity);
     Serial.printf("Umidade: %.1f%%\n", data.humidity);
   }
