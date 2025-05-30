@@ -2,6 +2,8 @@
 #include <ArduinoHA.h>
 #include "DHTesp.h"
 #include <ESP32Servo.h>
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
 
 #define PUBLISH_PERIOD     5000  // em milissegundos
 #define DHT_PIN            13
@@ -21,10 +23,15 @@
 #define WIFI_SSID          "Wokwi-GUEST"
 #define WIFI_PASSWORD      ""
 
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883
+#define AIO_USERNAME    "rodrigofnobrega"
+
 unsigned long lastTime = 0;
 
 DHTesp dhtSensor;
 WiFiClient client;
+WiFiClient clientAdafruit;
 Servo servo;
 
 HADevice device("irrigacao_solo_device");
@@ -35,6 +42,30 @@ HASwitch led_green("irrigacao_led_green");
 HASwitch led_yellow("irrigacao_led_yellow");
 HASensor dhtSensorHumi("irrigacao_humidity");
 HASwitch servo_switch("irrigacao_servo");
+
+Adafruit_MQTT_Client mqttAdafruit(&clientAdafruit, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_USERNAME, );
+
+Adafruit_MQTT_Publish mqttUmidadePublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_umidade");
+Adafruit_MQTT_Publish mqttServoPublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_servo");
+Adafruit_MQTT_Publish mqttIntensidadeBombaPublish = Adafruit_MQTT_Publish(&mqttAdafruit, AIO_USERNAME "/feeds/irrigacao_intensidade_bomba");
+
+void MQTT_connect() {
+  int8_t ret;
+  if (mqttAdafruit.connected()) return;
+
+  Serial.print("Conectando ao MQTT... ");
+  uint8_t retries = 3;
+  while ((ret = mqttAdafruit.connect()) != 0) {
+    Serial.println(mqttAdafruit.connectErrorString(ret));
+    Serial.println("Tentando novamente em 5 segundos...");
+    mqttAdafruit.disconnect();
+    delay(5000);
+    if (--retries == 0) {
+      while (1); // Trava aqui se não conectar
+    }
+  }
+  Serial.println("Conectado ao MQTT!");
+}
 
 void desligarTodosLeds() {
   digitalWrite(LED_RED_PIN, LOW);
@@ -126,6 +157,9 @@ void setup() {
 
 void loop() {
   mqtt.loop();
+  MQTT_connect();
+  mqttAdafruit.processPackets(10);
+  if (!mqttAdafruit.ping()) mqttAdafruit.disconnect();
 
   if (millis() - lastTime > PUBLISH_PERIOD) {
     lastTime = millis();
@@ -144,7 +178,9 @@ void loop() {
       servo.write(90);
       servo_switch.setState(HIGH);
       Serial.println("Servo ABERTO 90°");
-      Serial.println("Led vermelho ligado");
+      Serial.println("Led verde ligado");
+      mqttServoPublish.publish("ON");
+      mqttIntensidadeBombaPublish.publish("Vazão Alta");
     } else if (humidity < 60) {
       desligarTodosLeds();
       digitalWrite(LED_RED_PIN, HIGH);
@@ -156,6 +192,8 @@ void loop() {
       servo_switch.setState(HIGH);
       Serial.println("Servo ABERTO 45°");
       Serial.println("Led amarelo ligado");
+      mqttServoPublish.publish("ON");
+      mqttIntensidadeBombaPublish.publish("Vazão Média");
     } else {
       desligarTodosLeds();
       digitalWrite(LED_RED_PIN, HIGH);
@@ -165,9 +203,12 @@ void loop() {
       servo.write(0);
       servo_switch.setState(LOW);
       Serial.println("Servo Fechado");
-      Serial.println("Led verde ligado");
+      Serial.println("Led vermelho ligado");
+      mqttServoPublish.publish("OFF");
+      mqttIntensidadeBombaPublish.publish("Desligado");
     }
 
+    mqttUmidadePublish.publish(humidity);
     Serial.printf("Umidade: %.1f%%\n", data.humidity);
   }
 }
