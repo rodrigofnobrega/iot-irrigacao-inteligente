@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <DHTesp.h>
+#include <ESP32Servo.h>
 
 // put function declarations here:
 int myFunction(int, int);
