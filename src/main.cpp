@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <ArduinoHA.h>
 #include "DHTesp.h"
-#include <Servo.h>
+#include <ESP32Servo.h>
 
 #define PUBLISH_PERIOD     10000  // em milissegundos
 #define DHT_PIN            13
@@ -126,8 +126,12 @@ void loop() {
   if (millis() - lastTime > PUBLISH_PERIOD) {
     lastTime = millis();
     TempAndHumidity data = dhtSensor.getTempAndHumidity();
-    dhtSensorTemp.setValue(data.temperature);
-    dhtSensorHumi.setValue(data.humidity);
+    String tempStr = String(data.temperature, 1);  // Uma casa decimal
+    String humiStr = String(data.humidity, 1);
+
+    dhtSensorTemp.setValue(tempStr.c_str());
+    dhtSensorHumi.setValue(humiStr.c_str());
+
 
     Serial.printf("Temp: %.1f°C, Umidade: %.1f%%\n", data.temperature, data.humidity);
   }
