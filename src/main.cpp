@@ -36,6 +36,12 @@ HASwitch led_yellow("irrigacao_led_yellow");
 HASensor dhtSensorHumi("irrigacao_humidity");
 HASwitch servo_switch("irrigacao_servo");
 
+void desligarTodosLeds() {
+  digitalWrite(LED_RED_PIN, LOW);
+  digitalWrite(LED_BLUE_PIN, LOW);
+  digitalWrite(LED_GREEN_PIN, LOW);
+}
+
 void onRedSwitchCommand(bool state, HASwitch* sender) {
   digitalWrite(LED_RED_PIN, state ? HIGH : LOW);
   sender->setState(state);
@@ -60,12 +66,6 @@ void onServoSwitchCommand(bool state, HASwitch* sender) {
   sender->setState(state);
   Serial.print("Servo ");
   Serial.println(state ? "ABERTO " : "FECHADO ");
-}
-
-void desligarTodosLeds() {
-  digitalWrite(LED_RED_PIN, LOW);
-  digitalWrite(LED_BLUE_PIN, LOW);
-  digitalWrite(LED_GREEN_PIN, LOW);
 }
 
 void setup() {
@@ -137,9 +137,9 @@ void loop() {
 
     if (humidity < 40) {
       desligarTodosLeds();
-      digitalWrite(LED_RED_PIN, HIGH);
-      led_red.setState(HIGH);
-      led_green.setState(LOW);
+      digitalWrite(LED_GREEN_PIN, HIGH);
+      led_red.setState(LOW);
+      led_green.setState(HIGH);
       led_yellow.setState(LOW);
       servo.write(90);
       servo_switch.setState(HIGH);
@@ -158,9 +158,9 @@ void loop() {
       Serial.println("Led amarelo ligado");
     } else {
       desligarTodosLeds();
-      digitalWrite(LED_GREEN_PIN, HIGH);
-      led_red.setState(LOW);
-      led_green.setState(HIGH);
+      digitalWrite(LED_RED_PIN, HIGH);
+      led_red.setState(HIGH);
+      led_green.setState(LOW);
       led_yellow.setState(LOW);
       servo.write(0);
       servo_switch.setState(LOW);
