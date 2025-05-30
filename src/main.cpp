@@ -3,7 +3,7 @@
 #include "DHTesp.h"
 #include <ESP32Servo.h>
 
-#define PUBLISH_PERIOD     10000  // em milissegundos
+#define PUBLISH_PERIOD     5000  // em milissegundos
 #define DHT_PIN            13
 
 #define LED_RED_PIN        25
@@ -15,9 +15,9 @@
 #define BTN_B_PIN          34
 #define SERVO_PIN          18
 
-#define BROKER_ADDR        IPAddress(10,0,1,207)
-#define BROKER_USERNAME    "samuel00711"
-#define BROKER_PASSWORD    "@"
+#define BROKER_ADDR        IPAddress(192,168,1,184)
+#define BROKER_USERNAME   "aluno"
+#define BROKER_PASSWORD   "4luno#imd"
 #define WIFI_SSID          "Wokwi-GUEST"
 #define WIFI_PASSWORD      ""
 
@@ -27,15 +27,14 @@ DHTesp dhtSensor;
 WiFiClient client;
 Servo servo;
 
-HADevice device("SamuelFontes_feeddevice");
+HADevice device("irrigacao_solo_device");
 HAMqtt mqtt(client, device);
 
-HASwitch led_red("SamuelF_led_red");
-HASwitch led_green("SamuelF_led_green");
-HASwitch led_blue("SamuelF_led_blue");
-HASensor dhtSensorTemp("SamuelF_temperature");
-HASensor dhtSensorHumi("SamuelF_humidity");
-HASwitch servo_switch("SamuelF_servo");
+HASwitch led_red("irrigacao_led_red");
+HASwitch led_green("irrigacao_led_green");
+HASwitch led_yellow("irrigacao_led_yellow");
+HASensor dhtSensorHumi("irrigacao_humidity");
+HASwitch servo_switch("irrigacao_servo");
 
 void onRedSwitchCommand(bool state, HASwitch* sender) {
   digitalWrite(LED_RED_PIN, state ? HIGH : LOW);
@@ -46,17 +45,27 @@ void onGreenSwitchCommand(bool state, HASwitch* sender) {
   digitalWrite(LED_GREEN_PIN, state ? HIGH : LOW);
   sender->setState(state);
 }
-
-void onBlueSwitchCommand(bool state, HASwitch* sender) {
-  digitalWrite(LED_BLUE_PIN, state ? HIGH : LOW);
+void onYellowSwitchCommand(bool state, HASwitch* sender) {
+  if (state) {
+    digitalWrite(LED_RED_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    digitalWrite(LED_BLUE_PIN, LOW); 
+  } else {
+    desligarTodosLeds();
+  }
   sender->setState(state);
 }
-
 void onServoSwitchCommand(bool state, HASwitch* sender) {
   servo.write(state ? 90 : 0);  // 90° = aberto, 0° = fechado
   sender->setState(state);
   Serial.print("Servo ");
   Serial.println(state ? "ABERTO " : "FECHADO ");
+}
+
+void desligarTodosLeds() {
+  digitalWrite(LED_RED_PIN, LOW);
+  digitalWrite(LED_BLUE_PIN, LOW);
+  digitalWrite(LED_GREEN_PIN, LOW);
 }
 
 void setup() {
@@ -81,8 +90,9 @@ void setup() {
   pinMode(BTN_B_PIN, INPUT_PULLUP);
 
   // Configuração do dispositivo
-  device.setName("SamuelFontes");
+  device.setName("IrrigacaoSolo");
   device.setModel("ESP32-Wokwi");
+  device.setManufacturer("Rodrigo Nobrega e Samuel Fontes");
   device.setSoftwareVersion("1.0.0");
   device.enableSharedAvailability();
   device.setAvailability(true);
@@ -95,13 +105,8 @@ void setup() {
   led_green.setName("LED Verde");
   led_green.onCommand(onGreenSwitchCommand);
 
-  led_blue.setName("LED Azul");
-  led_blue.onCommand(onBlueSwitchCommand);
-
-  // Sensor de temperatura
-  dhtSensorTemp.setName("Temperatura");
-  dhtSensorTemp.setDeviceClass("temperature");
-  dhtSensorTemp.setUnitOfMeasurement("°C");
+  led_yellow.setName("LED Amarelo");
+  led_yellow.onCommand(onYellowSwitchCommand);
 
   // Sensor de umidade
   dhtSensorHumi.setName("Umidade");
@@ -122,47 +127,47 @@ void setup() {
 void loop() {
   mqtt.loop();
 
-  // Leitura de temperatura e umidade
   if (millis() - lastTime > PUBLISH_PERIOD) {
     lastTime = millis();
     TempAndHumidity data = dhtSensor.getTempAndHumidity();
-    String tempStr = String(data.temperature, 1);  // Uma casa decimal
-    String humiStr = String(data.humidity, 1);
+    float humidity = data.humidity;
+    String humiStr = String(humidity, 1);
 
-    dhtSensorTemp.setValue(tempStr.c_str());
     dhtSensorHumi.setValue(humiStr.c_str());
 
+    if (humidity < 40) {
+      desligarTodosLeds();
+      digitalWrite(LED_RED_PIN, HIGH);
+      led_red.setState(HIGH);
+      led_green.setState(LOW);
+      led_yellow.setState(LOW);
+      servo.write(90);
+      servo_switch.setState(HIGH);
+      Serial.println("Servo ABERTO 90°");
+      Serial.println("Led vermelho ligado");
+    } else if (humidity < 60) {
+      desligarTodosLeds();
+      digitalWrite(LED_RED_PIN, HIGH);
+      digitalWrite(LED_GREEN_PIN, HIGH);
+      led_red.setState(LOW);
+      led_green.setState(LOW);
+      led_yellow.setState(HIGH);
+      servo.write(45);
+      servo_switch.setState(HIGH);
+      Serial.println("Servo ABERTO 45°");
+      Serial.println("Led amarelo ligado");
+    } else {
+      desligarTodosLeds();
+      digitalWrite(LED_GREEN_PIN, HIGH);
+      led_red.setState(LOW);
+      led_green.setState(HIGH);
+      led_yellow.setState(LOW);
+      servo.write(0);
+      servo_switch.setState(LOW);
+      Serial.println("Servo Fechado");
+      Serial.println("Led verde ligado");
+    }
 
-    Serial.printf("Temp: %.1f°C, Umidade: %.1f%%\n", data.temperature, data.humidity);
+    Serial.printf("Umidade: %.1f%%\n", data.humidity);
   }
-
-  // Leitura dos botões (borda de descida)
-  static bool lastR = HIGH, lastG = HIGH, lastB = HIGH;
-
-  bool btnR = digitalRead(BTN_R_PIN);
-  bool btnG = digitalRead(BTN_G_PIN);
-  bool btnB = digitalRead(BTN_B_PIN);
-
-  if (lastR == HIGH && btnR == LOW) {
-    bool newState = !digitalRead(LED_RED_PIN);
-    digitalWrite(LED_RED_PIN, newState);
-    led_red.setState(newState);
-    Serial.println("Botão vermelho: toggle");
-  }
-  if (lastG == HIGH && btnG == LOW) {
-    bool newState = !digitalRead(LED_GREEN_PIN);
-    digitalWrite(LED_GREEN_PIN, newState);
-    led_green.setState(newState);
-    Serial.println("Botão verde: toggle");
-  }
-  if (lastB == HIGH && btnB == LOW) {
-    bool newState = !digitalRead(LED_BLUE_PIN);
-    digitalWrite(LED_BLUE_PIN, newState);
-    led_blue.setState(newState);
-    Serial.println("Botão azul: toggle");
-  }
-
-  lastR = btnR;
-  lastG = btnG;
-  lastB = btnB;
 }
