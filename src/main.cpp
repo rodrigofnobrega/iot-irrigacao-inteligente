@@ -184,7 +184,6 @@ void loop() {
       // Enviar dados para o adafruit
       mqttServoPublish.publish("ON"); 
       mqttIntensidadeBombaPublish.publish("Vazão Alta");
-
       Serial.println("Servo ABERTO 90°");
       Serial.println("Led verde ligado");
     } else if (humidity < 60) {
